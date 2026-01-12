@@ -5,10 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Availability;
 use App\Models\Meeting;
 use App\Models\User;
-use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB; // ✅ TAMBAHKAN IMPORT INI
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class MeetingController extends Controller
 {
@@ -52,20 +52,11 @@ class MeetingController extends Controller
      */
     public function store(Request $request)
     {
-        \Log::info('=== MEETING STORE METHOD STARTED ===');
-        \Log::info('Request data:', $request->all());
+        Log::info('=== MEETING STORE METHOD STARTED ===');
+        Log::info('Request data:', $request->all());
 
         try {
             $user = Auth::user();
-
-            // ✅ Middleware sudah handle:
-            // 1. auth (user login)
-            // 2. check.role:mahasiswa (user adalah mahasiswa)
-            // 3. sk.mahasiswa (mahasiswa punya SK aktif)
-
-            // ❌ BISA HAPUS validasi redundant ini:
-            // if (! $user) { ... }
-            // if (! $user->isMahasiswa()) { ... }
 
             $request->validate([
                 'availability_id' => 'required|exists:availabilities,id',
@@ -87,7 +78,7 @@ class MeetingController extends Controller
              */
             $isDosenPembimbing = DB::table('dosen_mahasiswa')
                 ->join('surat_keputusan', 'dosen_mahasiswa.sk_id', '=', 'surat_keputusan.id')
-                ->where('dosen_mahasiswa.mahasiswa_id', $user->id)           // Cek Mahasiswa Login
+                ->where('dosen_mahasiswa.mahasiswa_id', $user->id)          // Cek Mahasiswa Login
                 ->where('dosen_mahasiswa.dosen_id', $availability->dosen_id) // Cek Dosen Pemilik Jadwal
                 ->where('surat_keputusan.status', 'active')                  // Cek SK Aktif
                 ->exists();
@@ -97,14 +88,6 @@ class MeetingController extends Controller
                     ->with('error', 'Anda hanya bisa request meeting dengan dosen pembimbing Anda (sesuai SK aktif).')
                     ->withInput();
             }
-
-            // ✅ DEBUG DETAIL: Cek tipe data dan nilai
-            \Log::info('Availability debug:', [
-                'date' => $availability->date,
-                'date_type' => gettype($availability->date),
-                'start_time' => $availability->start_time,
-                'start_time_type' => gettype($availability->start_time),
-            ]);
 
             if ($availability->status !== 'available') {
                 return redirect()->back()
@@ -124,34 +107,29 @@ class MeetingController extends Controller
                     ->withInput();
             }
 
-            // ✅ PERBAIKAN: Format meeting_date yang benar
-            $meetingDate = null;
+            // ✅ PERBAIKAN LOGIC TANGGAL (SOLUSI FIX "JADWAL BELUM DITENTUKAN")
+            // Kita ambil tanggal dan jam dari availability, lalu gabung manual jadi string datetime
+            // Format yang dibutuhkan MySQL: 'Y-m-d H:i:s'
 
-            // Coba beberapa format sampai berhasil
+            // 1. Ambil String Tanggal (Y-m-d)
+            $datePart = $availability->date instanceof \Carbon\Carbon
+                ? $availability->date->format('d-m-Y')
+                : $availability->date; // Jika masih string
+
+            // 2. Ambil String Jam (H:i:s)
+            // start_time di model di-cast ke H:i, kita perlu pastikan formatnya aman
             try {
-                // Coba format 1: Gabung date dan start_time
-                if (is_string($availability->date) && is_string($availability->start_time)) {
-                    $meetingDate = $availability->date.' '.$availability->start_time;
-                    \Log::info('Format 1 - String concatenation:', ['meeting_date' => $meetingDate]);
-                }
-                // Coba format 2: Jika date adalah Carbon object
-                elseif ($availability->date instanceof \Carbon\Carbon) {
-                    $meetingDate = $availability->date->format('Y-m-d').' '.$availability->start_time;
-                    \Log::info('Format 2 - Carbon object:', ['meeting_date' => $meetingDate]);
-                }
-
-                // Validasi format datetime
-                if ($meetingDate && ! strtotime($meetingDate)) {
-                    \Log::warning('Invalid datetime format, setting to null');
-                    $meetingDate = null;
-                }
-
+                $timePart = \Carbon\Carbon::parse($availability->start_time)->format('H:i:s');
             } catch (\Exception $e) {
-                \Log::warning('Datetime parsing failed, setting to null', ['error' => $e->getMessage()]);
-                $meetingDate = null;
+                // Fallback jika format jam aneh, ambil default pagi atau null
+                $timePart = '08:00:00';
+                Log::warning('Gagal parse start_time, menggunakan default: '.$e->getMessage());
             }
 
-            \Log::info('Final meeting_date:', ['meeting_date' => $meetingDate]);
+            // 3. Gabungkan
+            $meetingDate = $datePart.' '.$timePart;
+
+            Log::info('Final meeting_date to save:', ['meeting_date' => $meetingDate]);
 
             // Create meeting request
             $meeting = Meeting::create([
@@ -161,19 +139,19 @@ class MeetingController extends Controller
                 'title' => $request->title,
                 'agenda' => $request->agenda,
                 'status' => 'pending',
-                'meeting_date' => $meetingDate, // Bisa null sementara
+                'meeting_date' => $meetingDate, // ✅ Sekarang pasti terisi string datetime valid
             ]);
 
             // Update availability status to booked
             $availability->update(['status' => 'booked']);
 
-            \Log::info('Meeting created successfully', ['meeting_id' => $meeting->id]);
+            Log::info('Meeting created successfully', ['meeting_id' => $meeting->id]);
 
             return redirect()->route('meetings.index')
                 ->with('success', 'Request bimbingan berhasil dikirim! Menunggu konfirmasi dosen.');
 
         } catch (\Exception $e) {
-            \Log::error('Meeting store error', [
+            Log::error('Meeting store error', [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
@@ -354,12 +332,19 @@ class MeetingController extends Controller
             // Determine event color based on status
             $color = $meeting->status === 'completed' ? '#10B981' : '#3B82F6'; // Green for completed, Blue for confirmed
 
+            // Handling tanggal untuk kalender (fallback ke created_at jika meeting_date null)
+            $start = $meeting->meeting_date
+                ? \Carbon\Carbon::parse($meeting->meeting_date)->format('Y-m-d H:i:s')
+                : $meeting->created_at->format('Y-m-d H:i:s');
+
+            $end = $meeting->meeting_date
+                ? \Carbon\Carbon::parse($meeting->meeting_date)->addHour()->format('Y-m-d H:i:s')
+                : \Carbon\Carbon::parse($meeting->created_at)->addHour()->format('Y-m-d H:i:s');
+
             $events[] = [
                 'title' => $title,
-                'start' => $meeting->meeting_date ?? $meeting->created_at->format('Y-m-d H:i:s'),
-                'end' => $meeting->meeting_date ?
-                         \Carbon\Carbon::parse($meeting->meeting_date)->addHour()->format('Y-m-d H:i:s') :
-                         \Carbon\Carbon::parse($meeting->created_at)->addHour()->format('Y-m-d H:i:s'),
+                'start' => $start,
+                'end' => $end,
                 'color' => $color,
                 'url' => route('meetings.show', $meeting),
                 'extendedProps' => [

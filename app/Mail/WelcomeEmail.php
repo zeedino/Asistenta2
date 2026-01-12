@@ -1,10 +1,10 @@
 <?php
+
 // app/Mail/WelcomeEmail.php
 
 namespace App\Mail;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
@@ -15,6 +15,7 @@ class WelcomeEmail extends Mailable
     use Queueable, SerializesModels;
 
     public $verificationToken;
+
     public $userEmail;
 
     /**

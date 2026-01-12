@@ -139,13 +139,24 @@
                                             <div class="flex-shrink-0">
                                                 <div
                                                     class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                                                    <i class="fas fa-file text-blue-600 text-lg"></i>
+                                                    @if ($document->user->isDosen())
+                                                        <i class="fas fa-book text-blue-600 text-lg"></i>
+                                                    @else
+                                                        <i class="fas fa-file-alt text-blue-600 text-lg"></i>
+                                                    @endif
                                                 </div>
                                             </div>
 
                                             <div class="flex-1">
-                                                <h3 class="font-semibold text-gray-800 text-lg">{{ $document->title }}
+                                                <h3 class="font-semibold text-gray-800 text-lg">
+                                                    {{ $document->title }}
+                                                    @if ($document->user->isDosen())
+                                                        <span
+                                                            class="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">Materi
+                                                            Dosen</span>
+                                                    @endif
                                                 </h3>
+
                                                 <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2">
                                                     <div class="flex items-center text-sm text-gray-600">
                                                         <i class="fas fa-tag mr-2"></i>
@@ -153,54 +164,36 @@
                                                     </div>
                                                     <div class="flex items-center text-sm text-gray-600">
                                                         <i class="fas fa-user mr-2"></i>
-                                                        @if (Auth::user()->isMahasiswa())
-                                                            @if ($document->user->isDosen())
-                                                                <span class="text-blue-600 font-medium">Materi dari
-                                                                    Dosen: {{ $document->user->username }}</span>
-                                                            @else
-                                                                Dokumen Saya
-                                                            @endif
-                                                        @else
-                                                            @if ($document->user->isDosen())
-                                                                Dosen: {{ $document->user->username }}
-                                                            @else
-                                                                Mahasiswa: {{ $document->user->username }}
-                                                            @endif
-                                                        @endif
+                                                        {{ $document->user->username }}
                                                     </div>
                                                     <div class="flex items-center text-sm text-gray-600">
                                                         <i class="fas fa-calendar mr-2"></i>
                                                         {{ $document->created_at->format('d M Y H:i') }}
                                                     </div>
                                                 </div>
+
                                                 @if ($document->description)
                                                     <p class="text-sm text-gray-600 mt-2">
-                                                        {{ Str::limit($document->description, 100) }}</p>
+                                                        {{ Str::limit($document->description, 100) }}
+                                                    </p>
                                                 @endif
-                                                <div class="flex items-center space-x-4 mt-2 text-xs text-gray-500">
-                                                    <span><i class="fas fa-file-alt mr-1"></i>
-                                                        {{ $document->file_name }}</span>
-                                                    <span><i class="fas fa-weight-hanging mr-1"></i>
-                                                        {{ $document->getFileSizeFormatted() }}</span>
-                                                    <span><i class="fas fa-code mr-1"></i>
-                                                        {{ strtoupper(pathinfo($document->file_name, PATHINFO_EXTENSION)) }}</span>
-                                                </div>
                                             </div>
                                         </div>
                                     </div>
 
                                     <div class="flex items-center space-x-3">
+
                                         <span
                                             class="px-3 py-1 rounded-full text-xs font-medium
-                                    {{ $document->status == 'draft'
-                                        ? 'bg-gray-100 text-gray-800'
-                                        : ($document->status == 'submitted'
-                                            ? 'bg-yellow-100 text-yellow-800'
-                                            : ($document->status == 'approved'
-                                                ? 'bg-green-100 text-green-800'
-                                                : ($document->status == 'rejected'
-                                                    ? 'bg-red-100 text-red-800'
-                                                    : 'bg-gray-100 text-gray-800'))) }}">
+                                            {{ $document->status == 'draft'
+                                                ? 'bg-gray-100 text-gray-800'
+                                                : ($document->status == 'submitted'
+                                                    ? 'bg-yellow-100 text-yellow-800'
+                                                    : ($document->status == 'approved'
+                                                        ? 'bg-green-100 text-green-800'
+                                                        : ($document->status == 'rejected'
+                                                            ? 'bg-red-100 text-red-800'
+                                                            : 'bg-gray-100 text-gray-800'))) }}">
                                             {{ $document->getStatusText() }}
                                         </span>
 
@@ -210,25 +203,32 @@
                                             <i class="fas fa-download"></i>
                                         </a>
 
-                                        @if (Auth::user()->isMahasiswa() && $document->canEdit())
+                                        @if (Auth::user()->isMahasiswa() &&
+                                                $document->user_id == Auth::id() &&
+                                                in_array($document->status, ['draft', 'rejected']))
                                             <a href="{{ route('documents.edit', $document) }}"
                                                 class="text-blue-600 hover:text-blue-800 transition duration-200"
                                                 title="Edit Dokumen">
                                                 <i class="fas fa-edit"></i>
                                             </a>
                                         @endif
-                                        @if (Auth::user()->isMahasiswa() && $document->canEdit())
+
+                                        @if (Auth::user()->isMahasiswa() &&
+                                                $document->user_id == Auth::id() &&
+                                                in_array($document->status, ['draft', 'rejected']) &&
+                                                $document->meeting_id)
                                             <form action="{{ route('documents.submit', $document) }}" method="POST"
                                                 class="inline"
-                                                onsubmit="return confirm('Submit dokumen untuk review dosen?')">
+                                                onsubmit="return confirm('Submit dokumen ini untuk direview dosen?')">
                                                 @csrf
                                                 <button type="submit"
-                                                    class="text-yellow-600 hover:text-yellow-800 transition duration-200"
-                                                    title="Submit untuk Review">
+                                                    class="text-yellow-600 hover:text-yellow-800 transition duration-200 ml-1"
+                                                    title="Kirim ke Dosen">
                                                     <i class="fas fa-paper-plane"></i>
                                                 </button>
                                             </form>
                                         @endif
+
                                         @if ($document->user->isDosen())
                                             <span class="text-xs text-blue-600 font-medium" title="Dokumen dari dosen">
                                                 <i class="fas fa-chalkboard-teacher"></i>
@@ -243,18 +243,12 @@
                 @else
                     <div class="text-center py-12">
                         <i class="fas fa-file-upload text-gray-300 text-5xl mb-4"></i>
-                        <h3 class="text-lg font-medium text-gray-600 mb-2">
-                            @if (Auth::user()->isMahasiswa())
-                                Belum ada dokumen
-                            @else
-                                Belum ada dokumen mahasiswa
-                            @endif
-                        </h3>
+                        <h3 class="text-lg font-medium text-gray-600 mb-2">Belum ada dokumen</h3>
                         <p class="text-gray-500 mb-4">
                             @if (Auth::user()->isMahasiswa())
                                 Mulai dengan mengupload dokumen pertama Anda
                             @else
-                                Mahasiswa belum mengupload dokumen
+                                Belum ada dokumen mahasiswa
                             @endif
                         </p>
                         @if (Auth::user()->isMahasiswa() || Auth::user()->isDosen())
@@ -273,7 +267,6 @@
         // Auto-hide flash messages
         document.addEventListener('DOMContentLoaded', function() {
             setTimeout(() => {
-                // PERBAIKAN 3: Gunakan selector spesifik '.flash-message'
                 const flashMessages = document.querySelectorAll('.flash-message');
                 flashMessages.forEach(message => {
                     message.style.transition = 'opacity 0.5s ease';

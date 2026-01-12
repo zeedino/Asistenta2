@@ -7,6 +7,7 @@ use App\Models\SuratKeputusan;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class SuratKeputusanController extends Controller
@@ -83,47 +84,59 @@ class SuratKeputusanController extends Controller
         if ($request->pembimbing1_dosen_id == $request->pembimbing2_dosen_id) {
             return redirect()->back()
                 ->withInput()
-                ->with('error', 'Pembimbing 1 dan Pembimbing 2 harus berbeda.');
+                ->with('error', 'Pembimbing 1 dan Pembimbing 2 harus orang yang berbeda.');
         }
 
-        // Handle file upload
-        $filePath = null;
-        if ($request->hasFile('file_sk')) {
-            $file = $request->file('file_sk');
-            $fileName = 'SK_'.time().'_'.$file->getClientOriginalName();
-            $filePath = $file->storeAs('surat_keputusan', $fileName, 'public');
+        try {
+            DB::transaction(function () use ($request) {
+
+                // 1. Handle File Upload
+                $filePath = null;
+                if ($request->hasFile('file_sk')) {
+                    $file = $request->file('file_sk');
+                    $fileName = 'SK_'.time().'_'.$file->getClientOriginalName();
+                    $filePath = $file->storeAs('surat_keputusan', $fileName, 'public');
+                }
+
+                // 2. Create SK Record
+                $sk = SuratKeputusan::create([
+                    'nomor_sk' => $request->nomor_sk,
+                    'tanggal_sk' => $request->tanggal_sk,
+                    'tahun_akademik' => $request->tahun_akademik,
+                    'semester' => $request->semester,
+                    'mahasiswa_id' => $request->mahasiswa_id,
+                    'admin_id' => Auth::id(),
+                    'file_sk' => $filePath,
+                    'keterangan' => $request->keterangan,
+                    'status' => 'active', // Set langsung active
+                ]);
+
+                // 3. Attach Pembimbing 1
+                DosenMahasiswa::create([
+                    'dosen_id' => $request->pembimbing1_dosen_id,
+                    'mahasiswa_id' => $request->mahasiswa_id,
+                    'sk_id' => $sk->id,
+                    'posisi' => 'Pembimbing 1',
+                ]);
+
+                // 4. Attach Pembimbing 2
+                DosenMahasiswa::create([
+                    'dosen_id' => $request->pembimbing2_dosen_id,
+                    'mahasiswa_id' => $request->mahasiswa_id,
+                    'sk_id' => $sk->id,
+                    'posisi' => 'Pembimbing 2',
+                ]);
+            });
+
+            return redirect()->route('admin.surat-keputusan.index')
+                ->with('success', 'Surat Keputusan berhasil dibuat dan Pembimbing telah ditetapkan!');
+
+        } catch (\Exception $e) {
+            // Jika error, kembali ke form dengan pesan error
+            return redirect()->back()
+                ->withInput()
+                ->with('error', 'Gagal menyimpan data: '.$e->getMessage());
         }
-
-        // Create SK untuk mahasiswa
-        $sk = SuratKeputusan::create([
-            'nomor_sk' => $request->nomor_sk,
-            'tanggal_sk' => $request->tanggal_sk,
-            'tahun_akademik' => $request->tahun_akademik,
-            'semester' => $request->semester,
-            'mahasiswa_id' => $request->mahasiswa_id,
-            'admin_id' => Auth::id(),
-            'file_sk' => $filePath,
-            'keterangan' => $request->keterangan,
-        ]);
-
-        // Attach dosen pembimbing 1
-        DosenMahasiswa::create([
-            'dosen_id' => $request->pembimbing1_dosen_id,
-            'mahasiswa_id' => $request->mahasiswa_id,
-            'sk_id' => $sk->id,
-            'posisi' => 'Pembimbing 1',
-        ]);
-
-        // Attach dosen pembimbing 2
-        DosenMahasiswa::create([
-            'dosen_id' => $request->pembimbing2_dosen_id,
-            'mahasiswa_id' => $request->mahasiswa_id,
-            'sk_id' => $sk->id,
-            'posisi' => 'Pembimbing 2',
-        ]);
-
-        return redirect()->route('admin.surat-keputusan.index')
-            ->with('success', 'Surat Keputusan berhasil dibuat!');
     }
 
     /**
@@ -194,58 +207,73 @@ class SuratKeputusanController extends Controller
             'keterangan' => 'nullable|string|max:500',
         ]);
 
-        // Validasi: Pembimbing harus berbeda
         if ($request->pembimbing1_dosen_id == $request->pembimbing2_dosen_id) {
             return redirect()->back()
                 ->withInput()
-                ->with('error', 'Pembimbing 1 dan Pembimbing 2 harus berbeda.');
+                ->with('error', 'Pembimbing 1 dan Pembimbing 2 harus orang yang berbeda.');
         }
 
-        // Handle file upload
-        $filePath = $suratKeputusan->file_sk;
-        if ($request->hasFile('file_sk')) {
-            // Delete old file if exists
-            if ($filePath && Storage::disk('public')->exists($filePath)) {
-                Storage::disk('public')->delete($filePath);
-            }
+        try {
+            DB::transaction(function () use ($request, $suratKeputusan) {
 
-            $file = $request->file('file_sk');
-            $fileName = 'SK_'.time().'_'.$file->getClientOriginalName();
-            $filePath = $file->storeAs('surat_keputusan', $fileName, 'public');
+                // 1. Handle File Upload (Simpan path baru dulu)
+                $newFilePath = null;
+                if ($request->hasFile('file_sk')) {
+                    $file = $request->file('file_sk');
+                    $fileName = 'SK_'.time().'_'.$file->getClientOriginalName();
+                    $newFilePath = $file->storeAs('surat_keputusan', $fileName, 'public');
+                }
+
+                // 2. Update SK Record
+                $updateData = [
+                    'nomor_sk' => $request->nomor_sk,
+                    'tanggal_sk' => $request->tanggal_sk,
+                    'tahun_akademik' => $request->tahun_akademik,
+                    'semester' => $request->semester,
+                    'mahasiswa_id' => $request->mahasiswa_id,
+                    'keterangan' => $request->keterangan,
+                ];
+
+                // Hanya update file_sk jika ada file baru
+                if ($newFilePath) {
+                    // Hapus file lama jika ada
+                    if ($suratKeputusan->file_sk && Storage::disk('public')->exists($suratKeputusan->file_sk)) {
+                        Storage::disk('public')->delete($suratKeputusan->file_sk);
+                    }
+                    $updateData['file_sk'] = $newFilePath;
+                }
+
+                $suratKeputusan->update($updateData);
+
+                // 3. Update Pembimbing (Delete Old & Create New)
+                // Hapus semua assignment lama untuk SK ini
+                $suratKeputusan->dosenMahasiswa()->delete();
+
+                // Create Pembimbing 1 Baru
+                DosenMahasiswa::create([
+                    'dosen_id' => $request->pembimbing1_dosen_id,
+                    'mahasiswa_id' => $request->mahasiswa_id,
+                    'sk_id' => $suratKeputusan->id,
+                    'posisi' => 'Pembimbing 1',
+                ]);
+
+                // Create Pembimbing 2 Baru
+                DosenMahasiswa::create([
+                    'dosen_id' => $request->pembimbing2_dosen_id,
+                    'mahasiswa_id' => $request->mahasiswa_id,
+                    'sk_id' => $suratKeputusan->id,
+                    'posisi' => 'Pembimbing 2',
+                ]);
+            });
+
+            return redirect()->route('admin.surat-keputusan.index')
+                ->with('success', 'Surat Keputusan berhasil diperbarui!');
+
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->withInput()
+                ->with('error', 'Gagal memperbarui data: '.$e->getMessage());
         }
-
-        // Update SK
-        $suratKeputusan->update([
-            'nomor_sk' => $request->nomor_sk,
-            'tanggal_sk' => $request->tanggal_sk,
-            'tahun_akademik' => $request->tahun_akademik,
-            'semester' => $request->semester,
-            'mahasiswa_id' => $request->mahasiswa_id,
-            'file_sk' => $filePath,
-            'keterangan' => $request->keterangan,
-        ]);
-
-        // Update pembimbing assignments
-        // Delete existing assignments
-        $suratKeputusan->dosenMahasiswa()->delete();
-
-        // Create new assignments
-        DosenMahasiswa::create([
-            'dosen_id' => $request->pembimbing1_dosen_id,
-            'mahasiswa_id' => $request->mahasiswa_id,
-            'sk_id' => $suratKeputusan->id,
-            'posisi' => 'Pembimbing 1',
-        ]);
-
-        DosenMahasiswa::create([
-            'dosen_id' => $request->pembimbing2_dosen_id,
-            'mahasiswa_id' => $request->mahasiswa_id,
-            'sk_id' => $suratKeputusan->id,
-            'posisi' => 'Pembimbing 2',
-        ]);
-
-        return redirect()->route('admin.surat-keputusan.index')
-            ->with('success', 'Surat Keputusan berhasil diperbarui!');
     }
 
     /**
@@ -253,19 +281,27 @@ class SuratKeputusanController extends Controller
      */
     public function destroy(SuratKeputusan $suratKeputusan)
     {
-        // Delete file if exists
-        if ($suratKeputusan->file_sk && Storage::disk('public')->exists($suratKeputusan->file_sk)) {
-            Storage::disk('public')->delete($suratKeputusan->file_sk);
+        try {
+            DB::transaction(function () use ($suratKeputusan) {
+                // 1. Hapus Relasi Dosen Mahasiswa (Pivot)
+                $suratKeputusan->dosenMahasiswa()->delete();
+
+                // 2. Hapus File Fisik
+                if ($suratKeputusan->file_sk && Storage::disk('public')->exists($suratKeputusan->file_sk)) {
+                    Storage::disk('public')->delete($suratKeputusan->file_sk);
+                }
+
+                // 3. Hapus Record SK
+                $suratKeputusan->delete();
+            });
+
+            return redirect()->route('admin.surat-keputusan.index')
+                ->with('success', 'Surat Keputusan berhasil dihapus!');
+
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->with('error', 'Gagal menghapus data: '.$e->getMessage());
         }
-
-        // Delete pembimbing assignments first
-        $suratKeputusan->dosenMahasiswa()->delete();
-
-        // Delete SK
-        $suratKeputusan->delete();
-
-        return redirect()->route('admin.surat-keputusan.index')
-            ->with('success', 'Surat Keputusan berhasil dihapus!');
     }
 
     /**
@@ -274,7 +310,7 @@ class SuratKeputusanController extends Controller
     public function download(SuratKeputusan $suratKeputusan)
     {
         if (! $suratKeputusan->file_sk || ! Storage::disk('public')->exists($suratKeputusan->file_sk)) {
-            return redirect()->back()->with('error', 'File SK tidak ditemukan.');
+            return redirect()->back()->with('error', 'File SK tidak ditemukan di server.');
         }
 
         $nomorSkSafe = str_replace(['/', '\\'], '-', $suratKeputusan->nomor_sk);

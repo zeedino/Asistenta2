@@ -12,7 +12,10 @@ return new class extends Migration
             $table->id();
             $table->foreignId('mahasiswa_id')->constrained('users')->onDelete('cascade');
             $table->foreignId('dosen_id')->constrained('users')->onDelete('cascade');
-            $table->foreignId('availability_id')->constrained('availabilities')->onDelete('cascade');
+            $table->foreignId('availability_id')
+                ->nullable()
+                ->constrained('availabilities')
+                ->onDelete('set null');
             $table->string('title');
             $table->text('agenda');
             $table->enum('status', ['pending', 'confirmed', 'rejected', 'completed', 'cancelled'])->default('pending');

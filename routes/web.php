@@ -17,9 +17,9 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 Route::middleware('guest')->group(function () {
-
     Route::get('/', fn () => view('welcome'))->name('welcome');
 
+    // ✅ REKOMENDASI: Gunakan nama 'login' agar kompatibel dengan default Laravel
     Route::get('/login', [AuthController::class, 'loginLihat'])->name('login.lihat');
     Route::post('/login/submit', [AuthController::class, 'loginSubmit'])->name('login.submit');
 
@@ -29,7 +29,7 @@ Route::middleware('guest')->group(function () {
     Route::get('/verify', [AuthController::class, 'verify'])->name('verify.email');
 });
 
-// Test email
+// Test email (Hapus saat production)
 Route::get('/send-mail', [EmailsController::class, 'welcomeEmail']);
 
 /*
@@ -103,18 +103,11 @@ Route::middleware('auth')->group(function () {
     */
 
     // 1️⃣ MAHASISWA (CREATE/STORE/EDIT) - WAJIB DI ATAS!
-    // Supaya '/logs/create' ditangkap duluan sebelum '/logs/{id}'
     Route::middleware(['check.role:mahasiswa', 'sk.mahasiswa'])->group(function () {
-
-        // Form Create & Proses Simpan
         Route::get('/logs/create', [LogController::class, 'create'])->name('logs.create');
         Route::post('/logs', [LogController::class, 'store'])->name('logs.store');
-
-        // Edit & Update
         Route::get('/logs/{log}/edit', [LogController::class, 'edit'])->name('logs.edit');
         Route::put('/logs/{log}', [LogController::class, 'update'])->name('logs.update');
-
-        // Submit Action
         Route::post('/logs/{log}/submit', [LogController::class, 'submit'])->name('logs.submit');
     });
 
@@ -122,69 +115,48 @@ Route::middleware('auth')->group(function () {
     Route::middleware(['check.role:dosen', 'sk.dosen'])->group(function () {
         Route::get('/logs/validation/queue', [LogController::class, 'validationIndex'])
             ->name('logs.validation.index');
-
         Route::post('/logs/{log}/validate', [LogController::class, 'validateLog'])->name('logs.validate');
         Route::post('/logs/{log}/reject', [LogController::class, 'reject'])->name('logs.reject');
     });
 
     // 3️⃣ GLOBAL VIEW (INDEX & SHOW) - TARUH PALING BAWAH!
-    // Karena '{log}' bersifat wildcard (menangkap apa saja), dia harus jadi jaring terakhir.
     Route::get('/logs', [LogController::class, 'index'])->name('logs.index');
     Route::get('/logs/{log}', [LogController::class, 'show'])->name('logs.show');
 
     /*
     |--------------------------------------------------------------------------
-    | DOCUMENTS
+    | DOCUMENTS (Fixed Order)
     |--------------------------------------------------------------------------
     */
 
-    // 1️⃣ ROUTE CREATE & STORE (SPECIFIC) - TARUH PALING ATAS
-    // Harus dicek duluan sebelum {document} agar kata "create" tidak dianggap ID.
-    Route::middleware([
-        'check.role:mahasiswa,dosen',
-        'sk.any',
-    ])->group(function () {
-        Route::get('/documents/create', [DocumentController::class, 'create'])
-            ->name('documents.create');
-
-        Route::post('/documents', [DocumentController::class, 'store'])
-            ->name('documents.store');
+    // 1️⃣ ROUTE CREATE & STORE
+    Route::middleware(['check.role:mahasiswa,dosen', 'sk.any'])->group(function () {
+        Route::get('/documents/create', [DocumentController::class, 'create'])->name('documents.create');
+        Route::post('/documents', [DocumentController::class, 'store'])->name('documents.store');
     });
 
-    // 2️⃣ ROUTE DOWNLOAD (SPECIFIC ACTION ON ID)
-    Route::get('/documents/{document}/download', [DocumentController::class, 'download'])
-        ->name('documents.download');
+    // 2️⃣ ROUTE DOWNLOAD
+    Route::get('/documents/{document}/download', [DocumentController::class, 'download'])->name('documents.download');
 
-    // 3️⃣ ROUTE SHOW (WILDCARD) - TARUH DI BAWAH
-    // {document} akan menangkap ID apa saja (angka/uuid), jadi taruh belakangan.
-    Route::get('/documents', [DocumentController::class, 'index'])
-        ->name('documents.index'); // Index aman ditaruh dimana saja karena tidak pakai /{param}
-
-    Route::get('/documents/{document}', [DocumentController::class, 'show'])
-        ->name('documents.show');
-
-    // 4️⃣ ROUTE EDIT & UPDATE (MAHASISWA)
-    Route::middleware(['check.role:mahasiswa', 'sk.mahasiswa'])->group(function () {
-        Route::get('/documents/{document}/edit', [DocumentController::class, 'edit'])
-            ->name('documents.edit');
-
-        Route::put('/documents/{document}', [DocumentController::class, 'update'])
-            ->name('documents.update');
-
-        Route::post('/documents/{document}/submit', [DocumentController::class, 'submit'])
-            ->name('documents.submit');
-    });
-
-    // 5️⃣ ROUTE REVIEW (DOSEN)
+    // 3️⃣ ROUTE REVIEW (DOSEN) - ⚠️ WAJIB DI ATAS ROUTE SHOW WILDCARD ⚠️
+    // Supaya '/documents/review/queue' TIDAK dianggap sebagai ID 'review' oleh route {document}
     Route::middleware(['check.role:dosen', 'sk.dosen'])->group(function () {
         Route::get('/documents/review/queue', [DocumentController::class, 'reviewIndex'])
-            ->name('documents.review.index'); // Ini aman karena spesifik
+            ->name('documents.review.index'); // <-- INI YANG SAYA PINDAHKAN KE ATAS
 
-        Route::post('/documents/{document}/approve', [DocumentController::class, 'approve'])
-            ->name('documents.approve');
+        Route::post('/documents/{document}/approve', [DocumentController::class, 'approve'])->name('documents.approve');
+        Route::post('/documents/{document}/reject', [DocumentController::class, 'reject'])->name('documents.reject');
+    });
 
-        Route::post('/documents/{document}/reject', [DocumentController::class, 'reject'])
-            ->name('documents.reject');
+    // 4️⃣ ROUTE SHOW (WILDCARD) - ⚠️ TARUH DI BAWAH ⚠️
+    Route::get('/documents', [DocumentController::class, 'index'])->name('documents.index');
+    Route::get('/documents/{document}', [DocumentController::class, 'show'])->name('documents.show');
+
+    // 5️⃣ ROUTE EDIT & UPDATE (MAHASISWA)
+    Route::middleware(['check.role:mahasiswa', 'sk.mahasiswa'])->group(function () {
+        Route::get('/documents/{document}/edit', [DocumentController::class, 'edit'])->name('documents.edit');
+        Route::put('/documents/{document}', [DocumentController::class, 'update'])->name('documents.update');
+        Route::post('/documents/{document}/submit', [DocumentController::class, 'submit'])->name('documents.submit');
     });
 
     /*
@@ -193,15 +165,12 @@ Route::middleware('auth')->group(function () {
     |--------------------------------------------------------------------------
     */
     Route::middleware(['check.role:admin'])->prefix('admin')->name('admin.')->group(function () {
-
         Route::resource('users', UserController::class);
         Route::post('/users/{user}/verify', [UserController::class, 'verify'])->name('users.verify');
-        Route::get('/users/export/excel', [UserController::class, 'exportExcel'])
-            ->name('users.export.excel');
+        Route::get('/users/export/excel', [UserController::class, 'exportExcel'])->name('users.export.excel');
 
         Route::resource('surat-keputusan', SuratKeputusanController::class);
-        Route::get('/surat-keputusan/{suratKeputusan}/download',
-            [SuratKeputusanController::class, 'download']
-        )->name('surat-keputusan.download');
+        Route::get('/surat-keputusan/{suratKeputusan}/download', [SuratKeputusanController::class, 'download'])
+            ->name('surat-keputusan.download');
     });
 });
