@@ -21,19 +21,6 @@ class UserController extends Controller
         return view('users.index', compact('users'));
     }
 
-    public function hasActiveSK()
-    {
-        return SuratKeputusan::where('status', 'aktif')
-            ->where(function ($q) {
-                if ($this->isDosen()) {
-                    $q->where('dosen_id', $this->id);
-                }
-                if ($this->isMahasiswa()) {
-                    $q->where('mahasiswa_id', $this->id);
-                }
-            })->exists();
-    }
-
     /**
      * Show the form for creating a new resource.
      */
@@ -94,7 +81,6 @@ class UserController extends Controller
             'status' => $request->status,
         ];
 
-        // Only update password if provided
         if ($request->filled('password')) {
             $request->validate([
                 'password' => ['confirmed', Rules\Password::defaults()],
