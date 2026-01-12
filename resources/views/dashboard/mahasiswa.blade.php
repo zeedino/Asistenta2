@@ -130,7 +130,8 @@
                     </div>
                 </div>
             @else
-                <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                <div id="active-sk-banner"
+                    class="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 transition-opacity duration-500">
                     <div class="flex items-center">
                         <i class="fas fa-check-circle text-green-600 text-xl mr-3"></i>
                         <div>
@@ -381,10 +382,7 @@
     </div>
 
     <script>
-        // Auto-hide flash messages
         setTimeout(() => {
-            // PERBAIKAN: Gunakan class .flash-message untuk selector
-            // Supaya elemen lain yang pakai background warna tidak ikut terhapus
             const flashMessages = document.querySelectorAll('.flash-message');
             flashMessages.forEach(msg => {
                 msg.style.transition = 'opacity 0.3s';
@@ -392,6 +390,16 @@
                 setTimeout(() => msg.remove(), 300);
             });
         }, 4000);
+
+        setTimeout(() => {
+            const skBanner = document.getElementById('active-sk-banner');
+            if (skBanner) {
+                skBanner.style.opacity = '0';
+                setTimeout(() => {
+                    skBanner.remove();
+                }, 500);
+            }
+        }, 5000);
     </script>
 </body>
 
