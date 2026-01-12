@@ -14,7 +14,6 @@
 
     <div class="container mx-auto px-4 py-8">
         <div class="max-w-7xl mx-auto">
-            <!-- Header -->
             <div class="mb-8">
                 <div class="flex justify-between items-center">
                     <div>
@@ -39,12 +38,17 @@
             </div>
 
             @if (session('success'))
-                <div class="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-6">
+                <div class="flash-message bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-6">
                     {{ session('success') }}
                 </div>
             @endif
 
-            <!-- Users Table -->
+            @if (session('error'))
+                <div class="flash-message bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+                    {{ session('error') }}
+                </div>
+            @endif
+
             <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-200">
@@ -91,19 +95,19 @@
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <span
                                             class="px-3 py-1 rounded-full text-xs font-medium
-                                        {{ $user->role == 'admin'
-                                            ? 'bg-purple-100 text-purple-800'
-                                            : ($user->role == 'dosen'
-                                                ? 'bg-blue-100 text-blue-800'
-                                                : 'bg-green-100 text-green-800') }}">
-                                            {{ $user->role }}
+                                            {{ $user->role == 'admin'
+                                                ? 'bg-purple-100 text-purple-800'
+                                                : ($user->role == 'dosen'
+                                                    ? 'bg-blue-100 text-blue-800'
+                                                    : 'bg-green-100 text-green-800') }}">
+                                            {{ ucfirst($user->role) }}
                                         </span>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <span
                                             class="px-3 py-1 rounded-full text-xs font-medium
-                                        {{ $user->status == 'aktif' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800' }}">
-                                            {{ $user->status }}
+                                            {{ $user->status == 'aktif' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800' }}">
+                                            {{ ucfirst($user->status) }}
                                         </span>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -111,20 +115,22 @@
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                         <div class="flex items-center space-x-2">
+
                                             @if ($user->status == 'pending')
                                                 <form action="{{ route('admin.users.verify', $user) }}" method="POST"
                                                     class="inline">
                                                     @csrf
                                                     <button type="submit"
-                                                        class="text-green-600 hover:text-green-900 bg-green-50 px-3 py-1 rounded text-sm"
-                                                        title="Verifikasi User">
-                                                        <i class="fas fa-check"></i>
+                                                        class="text-green-600 hover:text-green-900 bg-green-50 px-3 py-1 rounded text-sm transition duration-200"
+                                                        title="Verifikasi User"
+                                                        onclick="return confirm('Verifikasi user ini agar bisa login?')">
+                                                        <i class="fas fa-check mr-1"></i> Verifikasi
                                                     </button>
                                                 </form>
                                             @endif
 
                                             <a href="{{ route('admin.users.edit', $user) }}"
-                                                class="text-blue-600 hover:text-blue-900 bg-blue-50 px-3 py-1 rounded text-sm"
+                                                class="text-blue-600 hover:text-blue-900 bg-blue-50 px-3 py-1 rounded text-sm transition duration-200"
                                                 title="Edit User">
                                                 <i class="fas fa-edit"></i>
                                             </a>
@@ -134,7 +140,7 @@
                                                 @csrf
                                                 @method('DELETE')
                                                 <button type="submit"
-                                                    class="text-red-600 hover:text-red-900 bg-red-50 px-3 py-1 rounded text-sm"
+                                                    class="text-red-600 hover:text-red-900 bg-red-50 px-3 py-1 rounded text-sm transition duration-200"
                                                     onclick="return confirm('Apakah Anda yakin ingin menghapus user ini?')"
                                                     title="Hapus User">
                                                     <i class="fas fa-trash"></i>
@@ -156,7 +162,6 @@
                 </div>
             </div>
 
-            <!-- Back to Dashboard -->
             <div class="mt-6">
                 <a href="{{ route('admin.dashboard') }}" class="text-blue-600 hover:text-blue-800 flex items-center">
                     <i class="fas fa-arrow-left mr-2"></i>
@@ -168,9 +173,10 @@
 
     <script>
         // Auto-hide flash messages
+        // Hanya menargetkan elemen dengan class 'flash-message'
         document.addEventListener('DOMContentLoaded', function() {
             setTimeout(() => {
-                const flashMessages = document.querySelectorAll('.bg-green-50');
+                const flashMessages = document.querySelectorAll('.flash-message');
                 flashMessages.forEach(message => {
                     message.style.transition = 'opacity 0.5s ease';
                     message.style.opacity = '0';
